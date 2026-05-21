@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Devonote-AIED</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar" aria-label="Workspace sidebar">
+    <header class="sidebar-header">
+      <div class="brand" title="Devonote-AIED">
+        <span class="brand-mark" aria-hidden="true">D</span>
+        <span class="brand-name">Devonote-AIED</span>
+      </div>
+      <button class="icon-button sidebar-toggle" id="sidebarToggle" type="button" aria-label="Collapse sidebar" aria-expanded="true">
+        <span aria-hidden="true">&lsaquo;</span>
+      </button>
+    </header>
+
+    <div class="sidebar-content" id="sidebarContent">
+      <section class="sidebar-view topics-view is-active" id="topicsView" aria-labelledby="topicsTitle">
+        <div class="section-toolbar">
+          <button class="topics-toggle" id="topicsToggle" type="button" aria-expanded="true" aria-controls="topicList">
+            <span class="chevron" aria-hidden="true">&#9662;</span>
+            <span class="section-title" id="topicsTitle">Topics</span>
+          </button>
+          <button class="icon-button add-topic" id="addTopicButton" type="button" aria-label="Create new topic" title="New topic">
+            <span aria-hidden="true">+</span>
+          </button>
+        </div>
+
+        <div class="topic-list" id="topicList"></div>
+      </section>
+
+      <section class="sidebar-view topic-detail-view" id="topicDetailView" aria-labelledby="topicDetailTitle">
+        <div class="detail-header">
+          <button class="icon-button back-topic-button" id="backTopicButton" type="button" aria-label="Back to topics">
+            <span aria-hidden="true">&larr;</span>
+          </button>
+          <h2 class="detail-title" id="topicDetailTitle">Topic</h2>
+        </div>
+
+        <div class="page-list" id="pageList"></div>
+        <button class="add-page-button" id="addPageButton" type="button">Add</button>
+      </section>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="workspace-shell">
+      <p class="eyebrow">Personal study workspace</p>
+      <h1>Devonote-AIED</h1>
+      <p>
+        Your notes, references, and future coding pages will live here. For now,
+        use the sidebar to create and rename topics.
+      </p>
+    </div>
+  </main>
+
+  <div class="context-menu" id="topicContextMenu" role="menu" aria-hidden="true">
+    <button type="button" id="renameTopicButton" role="menuitem">Rename</button>
+    <button type="button" class="danger-menu-item" id="deleteTopicButton" role="menuitem">Delete</button>
+  </div>
+
+  <div class="add-page-popup" id="addPagePopup" aria-hidden="true">
+    <button type="button" data-page-type="tab">Tab</button>
+    <button type="button" data-page-type="document">Document</button>
+    <button type="button" data-page-type="code">Code</button>
+  </div>
+
+  <div class="modal-backdrop" id="deleteTopicModal" aria-hidden="true">
+    <div class="delete-modal" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+      <h2 id="deleteModalTitle">Delete Topic?</h2>
+      <p id="deleteModalMessage">This topic will be removed from your sidebar.</p>
+      <div class="modal-actions">
+        <button type="button" class="modal-button cancel-button" id="cancelDeleteButton">Cancel</button>
+        <button type="button" class="modal-button delete-button" id="confirmDeleteButton">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
