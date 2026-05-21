@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body class="no-transition">
   <aside class="sidebar" id="sidebar" aria-label="Workspace sidebar">
     <header class="sidebar-header">
       <div class="brand" title="Devonote-AIED">
@@ -21,7 +21,7 @@
       </button>
     </header>
 
-    <div class="sidebar-content" id="sidebarContent">
+    <div class="sidebar-content" id="sidebarContent" data-view="topics">
       <section class="sidebar-view topics-view is-active" id="topicsView" aria-labelledby="topicsTitle">
         <div class="section-toolbar">
           <button class="topics-toggle" id="topicsToggle" type="button" aria-expanded="true" aria-controls="topicList">

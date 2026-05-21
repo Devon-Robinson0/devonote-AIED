@@ -28,8 +28,22 @@
   --accent-shadow: 0 8px 18px rgba(37, 99, 235, 0.16);
 }
 
+@property --dropdown-height {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 * {
   box-sizing: border-box;
+}
+
+.no-transition *,
+.no-transition *::before,
+.no-transition *::after,
+.no-dropdown-transition {
+  transition: none !important;
+  animation: none !important;
 }
 
 body {
@@ -259,14 +273,27 @@ button {
 .topic-list {
   display: grid;
   gap: 4px;
-  max-height: calc(100vh - 118px);
+  max-height: var(--dropdown-height, calc(100vh - 118px));
   margin-top: 8px;
-  overflow: auto;
-  transition: opacity 160ms ease;
+  overflow-x: hidden;
+  overflow-y: auto;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 220ms ease, opacity 180ms ease, transform 180ms ease;
+  scrollbar-width: none;
+}
+
+.topic-list::-webkit-scrollbar,
+.page-list::-webkit-scrollbar,
+.tab-children::-webkit-scrollbar {
+  display: none;
 }
 
 .topics-view.is-closed .topic-list {
-  display: none;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
 }
 
 .topic-row {
@@ -400,7 +427,9 @@ button {
   gap: 4px;
   max-height: calc(100vh - 166px);
   margin-top: 12px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 
 .page-row {
@@ -457,6 +486,35 @@ button {
   color: var(--accent-blue-strong);
   background: var(--accent-blue-soft);
   outline: 1px solid var(--accent-blue-border);
+}
+
+.page-row.is-tab .page-button {
+  cursor: pointer;
+}
+
+.page-row.is-tab.is-collapsed .page-name::after {
+  margin-left: 8px;
+  color: var(--secondary-text);
+  content: "collapsed";
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.tab-children {
+  display: grid;
+  gap: 4px;
+  max-height: var(--dropdown-height, 0px);
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  transition: max-height 210ms ease, opacity 170ms ease, transform 170ms ease;
+}
+
+.tab-children.is-collapsed {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
 }
 
 .page-button,
@@ -567,18 +625,26 @@ button {
 .add-page-popup {
   position: fixed;
   z-index: 30;
-  display: none;
+  display: grid;
+  gap: 2px;
   min-width: 150px;
   padding: 6px;
+  visibility: hidden;
+  opacity: 0;
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   box-shadow: var(--shadow);
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
 }
 
 .add-page-popup.is-visible {
-  display: grid;
-  gap: 2px;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .add-page-popup button {

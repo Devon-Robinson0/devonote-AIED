@@ -14,6 +14,8 @@ const PAGE_TYPE_MARKERS = {
   code: 'C'
 };
 
+const DROP_TARGET_SWITCH_THRESHOLD = 8;
+
 const sidebar = document.getElementById('sidebar');
 const sidebarToggle = document.getElementById('sidebarToggle');
 const sidebarContent = document.getElementById('sidebarContent');
@@ -45,6 +47,8 @@ let deleteTarget = null;
 let addPageParentTabId = null;
 let dragState = null;
 let dropTarget = null;
+let activeDropKey = null;
+let activeDropDistance = Infinity;
 let topics = [];
 
 const topicDropIndicator = document.createElement('div');
@@ -152,6 +156,9 @@ window.addEventListener('resize', () => {
 });
 
 renderTopics();
+requestAnimationFrame(() => {
+  document.body.classList.remove('no-transition');
+});
 
 function toggleSidebar() {
   const isCollapsed = sidebar.classList.toggle('is-collapsed');
@@ -167,6 +174,9 @@ function toggleTopicsSubmenu() {
   const isClosed = topicsView.classList.toggle('is-closed');
 
   topicsToggle.setAttribute('aria-expanded', String(!isClosed));
+  topicList.inert = isClosed;
+  topicList.setAttribute('aria-hidden', String(isClosed));
+  updateDropdownAnimation(topicList, !isClosed, true);
   hideContextMenu();
 }
 
@@ -194,6 +204,7 @@ function createTopic() {
   topics.push(topic);
   selectedTopicId = topic.id;
   renderTopics();
+  refreshOpenDropdowns();
   renameTopic(getTopicRow(topic.id));
 }
 
@@ -203,6 +214,8 @@ function renderTopics() {
   topics.forEach((topic) => {
     topicList.appendChild(createTopicRow(topic));
   });
+
+  refreshOpenDropdowns();
 }
 
 function createTopicRow(topic) {
@@ -304,15 +317,32 @@ function renderPages(topicId) {
     }));
 
     if (page.type === 'tab') {
-      page.children.forEach((child, childIndex) => {
-        pageList.appendChild(renderPageRow(child, {
-          parentTabId: page.id,
-          index: childIndex,
-          isChild: true
-        }));
-      });
+      pageList.appendChild(renderTabChildren(page));
     }
   });
+
+  refreshOpenDropdowns();
+}
+
+function renderTabChildren(tabPage) {
+  const childrenContainer = document.createElement('div');
+
+  childrenContainer.className = 'tab-children';
+  childrenContainer.dataset.parentTabId = String(tabPage.id);
+  childrenContainer.classList.toggle('is-collapsed', Boolean(tabPage.collapsed));
+  childrenContainer.inert = Boolean(tabPage.collapsed);
+  childrenContainer.setAttribute('aria-hidden', String(Boolean(tabPage.collapsed)));
+
+  tabPage.children.forEach((child, childIndex) => {
+    childrenContainer.appendChild(renderPageRow(child, {
+      parentTabId: tabPage.id,
+      index: childIndex,
+      isChild: true
+    }));
+  });
+
+  updateDropdownAnimation(childrenContainer, !tabPage.collapsed, false);
+  return childrenContainer;
 }
 
 function renderPageRow(page, options) {
@@ -329,6 +359,7 @@ function renderPageRow(page, options) {
   row.draggable = true;
   row.classList.toggle('is-child', options.isChild);
   row.classList.toggle('is-tab', page.type === 'tab');
+  row.classList.toggle('is-collapsed', page.type === 'tab' && Boolean(page.collapsed));
   row.classList.toggle('is-active', page.id === selectedPageId);
   row.setAttribute('title', page.name);
 
@@ -352,15 +383,31 @@ function renderPageRow(page, options) {
   marker.textContent = PAGE_TYPE_MARKERS[page.type];
   marker.setAttribute('aria-hidden', 'true');
 
-  pageButton.addEventListener('click', () => selectPage(page.id));
-  pageButton.addEventListener('dblclick', () => startRenamingPage(page.id));
+  pageButton.addEventListener('click', (event) => {
+    selectPage(page.id);
+
+    if (page.type === 'tab' && !dragState && event.detail === 1) {
+      toggleTabCollapsed(page.id);
+    }
+  });
+  pageButton.addEventListener('dblclick', () => {
+    startRenamingPage(page.id);
+  });
   row.addEventListener('contextmenu', (event) => showPageContextMenu(event, page.id));
+  row.addEventListener('click', (event) => {
+    if (page.type !== 'tab' || dragState || event.target.closest('.tab-add-button, .page-button')) {
+      return;
+    }
+
+    selectPage(page.id);
+    toggleTabCollapsed(page.id);
+  });
   row.addEventListener('dragstart', (event) => handlePageDragStart(event, page.id));
   row.addEventListener('dragover', (event) => handlePageDragOver(event, getPageDropInfo(event, row)));
   row.addEventListener('drop', (event) => handlePageDrop(event, dropTarget));
   row.addEventListener('dragend', clearDragState);
 
-  row.append(pageButton);
+  row.append(pageButton, marker);
 
   if (page.type === 'tab') {
     const tabAddButton = document.createElement('button');
@@ -374,10 +421,9 @@ function renderPageRow(page, options) {
       openAddPagePopup(tabAddButton, page.id);
     });
     tabAddButton.addEventListener('mousedown', (event) => event.stopPropagation());
+    tabAddButton.addEventListener('dragstart', (event) => event.preventDefault());
     row.append(tabAddButton);
   }
-
-  row.append(marker);
   return row;
 }
 
@@ -403,6 +449,44 @@ function closeAddPagePopup() {
   addPageParentTabId = null;
 }
 
+function toggleTabCollapsed(tabId) {
+  const tab = findPageById(tabId)?.page;
+  const tabRow = getPageRow(tabId);
+  const childrenContainer = pageList.querySelector(`.tab-children[data-parent-tab-id="${tabId}"]`);
+
+  if (!tab || tab.type !== 'tab' || !childrenContainer) {
+    return;
+  }
+
+  tab.collapsed = !tab.collapsed;
+  tabRow?.classList.toggle('is-collapsed', tab.collapsed);
+  childrenContainer.classList.toggle('is-collapsed', tab.collapsed);
+  childrenContainer.inert = tab.collapsed;
+  childrenContainer.setAttribute('aria-hidden', String(tab.collapsed));
+  updateDropdownAnimation(childrenContainer, !tab.collapsed, true);
+}
+
+function updateDropdownAnimation(element, expanded, animate = false) {
+  if (!animate) {
+    element.classList.add('no-dropdown-transition');
+  }
+
+  element.style.setProperty('--dropdown-height', expanded ? `${element.scrollHeight}px` : '0px');
+
+  if (!animate) {
+    element.offsetHeight;
+    element.classList.remove('no-dropdown-transition');
+  }
+}
+
+function refreshOpenDropdowns() {
+  updateDropdownAnimation(topicList, !topicsView.classList.contains('is-closed'), false);
+
+  pageList.querySelectorAll('.tab-children').forEach((childrenContainer) => {
+    updateDropdownAnimation(childrenContainer, !childrenContainer.classList.contains('is-collapsed'), false);
+  });
+}
+
 function createPage(type, parentTabId = null) {
   const topic = findTopic(currentTopicId);
   const pageName = PAGE_TYPE_NAMES[type];
@@ -420,6 +504,7 @@ function createPage(type, parentTabId = null) {
 
   if (type === 'tab') {
     page.children = [];
+    page.collapsed = true;
   }
 
   insertPageAt(page, parentTabId, getPageArray(parentTabId, topic)?.length ?? topic.pages.length);
@@ -842,6 +927,8 @@ function hideContextMenu() {
 
 function handleTopicDragStart(event, topicId) {
   dragState = { type: 'topic', id: topicId };
+  activeDropKey = null;
+  activeDropDistance = Infinity;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', String(topicId));
   event.currentTarget.classList.add('is-dragging');
@@ -857,21 +944,14 @@ function handleTopicDragOver(event, topicId) {
   event.preventDefault();
   event.stopPropagation();
 
-  const targetRow = topicId === null ? null : getTopicRow(topicId);
-  let targetIndex = topics.length;
+  const target = getNearestDropTarget(event.clientY, getTopicDropTargets());
 
-  if (targetRow) {
-    const targetTopicIndex = topics.findIndex((topic) => topic.id === topicId);
-    const rect = targetRow.getBoundingClientRect();
-    const isAfter = event.clientY > rect.top + rect.height / 2;
-
-    targetIndex = targetTopicIndex + (isAfter ? 1 : 0);
-    targetRow[isAfter ? 'after' : 'before'](topicDropIndicator);
-  } else {
-    topicList.appendChild(topicDropIndicator);
+  if (!target || !shouldUpdateDropTarget(dropTarget, target, DROP_TARGET_SWITCH_THRESHOLD)) {
+    return;
   }
 
-  dropTarget = { index: targetIndex };
+  dropTarget = target;
+  placeTopicDropIndicator(target);
 }
 
 function handleTopicDrop(event, targetIndex = dropTarget?.index) {
@@ -903,6 +983,8 @@ function handlePageDragStart(event, pageId) {
   }
 
   dragState = { type: 'page', id: pageId, pageType: page.type };
+  activeDropKey = null;
+  activeDropDistance = Infinity;
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', String(pageId));
   event.currentTarget.classList.add('is-dragging');
@@ -917,16 +999,25 @@ function handlePageDragOver(event, targetInfo) {
 
   event.preventDefault();
   event.stopPropagation();
-  clearTabDropHighlights();
-
-  const normalizedTarget = normalizePageDropTarget(targetInfo);
+  const normalizedTarget = normalizePageDropTarget(getNearestDropTarget(
+    event.clientY,
+    getPageDropTargets(event, targetInfo)
+  ));
 
   if (!normalizedTarget) {
     dropTarget = null;
+    activeDropKey = null;
+    activeDropDistance = Infinity;
+    clearTabDropHighlights();
     removeDropIndicators();
     return;
   }
 
+  if (!shouldUpdateDropTarget(dropTarget, normalizedTarget, DROP_TARGET_SWITCH_THRESHOLD)) {
+    return;
+  }
+
+  clearTabDropHighlights();
   dropTarget = normalizedTarget;
 
   if (normalizedTarget.mode === 'into') {
@@ -954,32 +1045,9 @@ function handlePageDrop(event, targetInfo) {
 }
 
 function getPageDropInfo(event, row) {
-  const pageId = getPageIdFromRow(row);
-  const targetPage = findPageById(pageId)?.page;
-  const parentTabId = getParentTabIdFromRow(row);
-  const targetIndex = Number(row.dataset.index);
-  const rect = row.getBoundingClientRect();
-  const isAfter = event.clientY > rect.top + rect.height / 2;
-
-  if (
-    targetPage?.type === 'tab' &&
-    dragState?.pageType !== 'tab' &&
-    dragState?.id !== targetPage.id &&
-    event.clientX > rect.left + 56
-  ) {
-    return {
-      mode: 'into',
-      parentTabId: targetPage.id,
-      index: targetPage.children.length
-    };
-  }
-
   return {
-    mode: 'insert',
-    parentTabId,
-    index: targetIndex + (isAfter ? 1 : 0),
-    row,
-    isAfter
+    cursorX: event.clientX,
+    row
   };
 }
 
@@ -1003,7 +1071,223 @@ function normalizePageDropTarget(targetInfo) {
   return targetInfo;
 }
 
+function getNearestDropTarget(cursorY, validTargets) {
+  if (!validTargets.length) {
+    return null;
+  }
+
+  return validTargets.reduce((nearest, target) => {
+    const distance = Math.abs(cursorY - target.y);
+
+    if (!nearest || distance < nearest.distance) {
+      return {
+        ...target,
+        distance
+      };
+    }
+
+    return nearest;
+  }, null);
+}
+
+function shouldUpdateDropTarget(previousTarget, nextTarget, threshold) {
+  const nextKey = getDropTargetKey(nextTarget);
+
+  if (!previousTarget || activeDropKey === null) {
+    activeDropKey = nextKey;
+    activeDropDistance = nextTarget.distance ?? 0;
+    return true;
+  }
+
+  if (activeDropKey === nextKey) {
+    activeDropDistance = nextTarget.distance ?? 0;
+    return false;
+  }
+
+  if ((nextTarget.distance ?? 0) > activeDropDistance - threshold) {
+    return false;
+  }
+
+  activeDropKey = nextKey;
+  activeDropDistance = nextTarget.distance ?? 0;
+  return true;
+}
+
+function getDropTargetKey(target) {
+  if (!target) {
+    return '';
+  }
+
+  return [
+    target.type || 'page',
+    target.mode || 'insert',
+    target.parentTabId ?? 'top',
+    target.index,
+    target.anchorId ?? 'end',
+    target.isAfter ? 'after' : 'before'
+  ].join(':');
+}
+
+function getTopicDropTargets() {
+  const targets = topics.map((topic, index) => {
+    const row = getTopicRow(topic.id);
+    const rect = row.getBoundingClientRect();
+
+    return {
+      type: 'topic',
+      index,
+      y: rect.top,
+      row,
+      isAfter: false,
+      anchorId: topic.id
+    };
+  });
+
+  const lastTopic = topics[topics.length - 1];
+
+  if (lastTopic) {
+    const lastRow = getTopicRow(lastTopic.id);
+    const lastRect = lastRow.getBoundingClientRect();
+
+    targets.push({
+      type: 'topic',
+      index: topics.length,
+      y: lastRect.bottom,
+      row: lastRow,
+      isAfter: true,
+      anchorId: lastTopic.id
+    });
+  } else {
+    const listRect = topicList.getBoundingClientRect();
+
+    targets.push({
+      type: 'topic',
+      index: 0,
+      y: listRect.top,
+      row: null,
+      isAfter: true,
+      anchorId: 'empty'
+    });
+  }
+
+  return targets;
+}
+
+function getPageDropTargets(event, targetInfo) {
+  const topic = findTopic(currentTopicId);
+  const targets = [];
+
+  if (!topic) {
+    return targets;
+  }
+
+  topic.pages.forEach((page, index) => {
+    const row = getPageRow(page.id);
+
+    if (!row || page.id === dragState?.id) {
+      return;
+    }
+
+    const rect = row.getBoundingClientRect();
+
+    targets.push({
+      mode: 'insert',
+      parentTabId: null,
+      index,
+      y: rect.top,
+      row,
+      isAfter: false,
+      anchorId: page.id
+    });
+
+    if (page.type === 'tab' && dragState?.pageType !== 'tab' && dragState?.id !== page.id && event.clientX > rect.left + 56) {
+      targets.push({
+        mode: 'into',
+        parentTabId: page.id,
+        index: page.children.length,
+        y: rect.top + rect.height / 2,
+        anchorId: page.id
+      });
+    }
+
+    if (page.type === 'tab' && !page.collapsed) {
+      page.children.forEach((child, childIndex) => {
+        const childRow = getPageRow(child.id);
+
+        if (!childRow || child.id === dragState?.id) {
+          return;
+        }
+
+        const childRect = childRow.getBoundingClientRect();
+
+        targets.push({
+          mode: 'insert',
+          parentTabId: page.id,
+          index: childIndex,
+          y: childRect.top,
+          row: childRow,
+          isAfter: false,
+          anchorId: child.id
+        });
+      });
+
+      const lastChild = page.children[page.children.length - 1];
+
+      if (lastChild) {
+        const lastChildRow = getPageRow(lastChild.id);
+        const lastChildRect = lastChildRow.getBoundingClientRect();
+
+        targets.push({
+          mode: 'insert',
+          parentTabId: page.id,
+          index: page.children.length,
+          y: lastChildRect.bottom,
+          row: lastChildRow,
+          isAfter: true,
+          anchorId: lastChild.id
+        });
+      }
+    }
+  });
+
+  const lastPage = topic.pages[topic.pages.length - 1];
+
+  if (lastPage) {
+    const lastElement = getLastVisiblePageElement(lastPage);
+    const lastRect = lastElement.getBoundingClientRect();
+
+    targets.push({
+      mode: 'insert',
+      parentTabId: null,
+      index: topic.pages.length,
+      y: lastRect.bottom,
+      element: lastElement,
+      isAfter: true,
+      anchorId: lastPage.id
+    });
+  } else {
+    const listRect = pageList.getBoundingClientRect();
+
+    targets.push({
+      mode: 'insert',
+      parentTabId: null,
+      index: 0,
+      y: listRect.top,
+      row: null,
+      isAfter: true,
+      anchorId: 'empty'
+    });
+  }
+
+  return targets;
+}
+
 function placePageDropIndicator(targetInfo) {
+  if (targetInfo.element) {
+    targetInfo.element[targetInfo.isAfter ? 'after' : 'before'](pageDropIndicator);
+    return;
+  }
+
   if (targetInfo.row) {
     targetInfo.row[targetInfo.isAfter ? 'after' : 'before'](pageDropIndicator);
     return;
@@ -1012,9 +1296,20 @@ function placePageDropIndicator(targetInfo) {
   pageList.appendChild(pageDropIndicator);
 }
 
+function placeTopicDropIndicator(targetInfo) {
+  if (targetInfo.row) {
+    targetInfo.row[targetInfo.isAfter ? 'after' : 'before'](topicDropIndicator);
+    return;
+  }
+
+  topicList.appendChild(topicDropIndicator);
+}
+
 function clearDragState() {
   dragState = null;
   dropTarget = null;
+  activeDropKey = null;
+  activeDropDistance = Infinity;
   document.querySelectorAll('.is-dragging').forEach((element) => element.classList.remove('is-dragging'));
   clearTabDropHighlights();
   removeDropIndicators();
@@ -1135,6 +1430,14 @@ function getPageArray(parentTabId, topic = findTopic(currentTopicId)) {
   const parentTab = findPageById(parentTabId, topic)?.page;
 
   return parentTab?.type === 'tab' ? parentTab.children : null;
+}
+
+function getLastVisiblePageElement(page) {
+  if (page.type === 'tab' && !page.collapsed && page.children.length) {
+    return getPageRow(page.children[page.children.length - 1].id);
+  }
+
+  return getPageRow(page.id);
 }
 
 function getFirstPageId(topic) {
